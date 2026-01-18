@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/receive",
+      "dest": "/api/receive.js"
+    },
+    {
+      "src": "/api/command",
+      "dest": "/api/command.js"
+    },
+    {
+      "src": "/api/stats",
+      "dest": "/api/stats.js"
+    },
+    {
+      "src": "/api/list",
+      "dest": "/api/list.js"
+    }
+  ]
+}
