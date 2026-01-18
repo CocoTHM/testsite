@@ -1,5 +1,11 @@
-// api/receive.js - Fonction serverless pour Vercel avec KV Storage
-import { kv } from '@vercel/kv';
+// api/receive.js - Fonction serverless pour Vercel
+let kv = null;
+try {
+    const kvModule = await import('@vercel/kv');
+    kv = kvModule.kv;
+} catch (e) {
+    console.log('KV not available, running without storage');
+}
 
 export default async function handler(req, res) {
     // Activer CORS
@@ -20,20 +26,24 @@ export default async function handler(req, res) {
         const timestamp = Date.now();
         const key = `data:${timestamp}:${data.type}`;
         
-        // Sauvegarder dans Vercel KV (Redis)
-        await kv.set(key, data);
+        // Sauvegarder dans Vercel KV si disponible
+        if (kv) {
+            try {
+                await kv.set(key, data);
+                await kv.lpush('data:list', key);
+                await kv.ltrim('data:list', 0, 999);
+                console.log(`📥 ${data.type}: Saved to KV`);
+            } catch (kvError) {
+                console.error('KV Error:', kvError.message);
+                console.log(`📥 ${data.type}: Logged only (KV unavailable)`);
+            }
+        } else {
+            console.log(`📥 ${data.type}: ${JSON.stringify(data).substring(0, 100)}`);
+        }
         
-        // Ajouter à une liste pour pouvoir récupérer toutes les données
-        await kv.lpush('data:list', key);
-        
-        // Garder seulement les 1000 dernières entrées
-        await kv.ltrim('data:list', 0, 999);
-        
-        console.log(`📥 ${data.type}: ${data.lat || data.image ? 'OK' : 'data'} - Saved to KV`);
-        
-        res.status(200).json({ status: 'OK', key });
+        res.status(200).json({ status: 'OK', key, kv: !!kv });
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Error:', error.message, error.stack);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 }
