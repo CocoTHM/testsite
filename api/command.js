@@ -23,7 +23,19 @@ export default async function handler(req, res) {
     }
     
     if (req.method === 'POST') {
-        try if (kv) {
+        try {
+            const { module, action, params = {} } = req.body;
+            
+            const command = {
+                id: Date.now().toString(),
+                module,
+                action,
+                params,
+                executed: false,
+                timestamp: Date.now()
+            };
+            
+            if (kv) {
                 try {
                     await kv.set(`command:${command.id}`, command);
                     await kv.set('command:latest', command);
@@ -82,21 +94,11 @@ export default async function handler(req, res) {
             }
         } catch (error) {
             console.error('Error:', error.message);
-            res.status(500).json({ error: 'Internal server error', details: error.message
-                // Marquer comme exécutée
-                command.executed = true;
-                await kv.set(`command:${command.id}`, command);
-                await kv.set('command:latest', command);
-                
-                res.status(200).json(command);
-            } else {
-                res.status(200).json({ status: 'no-command' });
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            res.status(500).json({ error: 'Internal server error' });
+            res.status(500).json({ error: 'Internal server error', details: error.message });
         }
     } else {
         res.status(405).json({ error: 'Method not allowed' });
+    }
+}
     }
 }

