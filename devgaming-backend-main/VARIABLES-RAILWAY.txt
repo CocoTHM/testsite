@@ -1,0 +1,109 @@
+🔐 VARIABLES D'ENVIRONNEMENT RAILWAY - BACKEND
+================================================
+
+Ces variables doivent être configurées dans Railway Dashboard :
+Project → Backend Service → Variables
+
+## ✅ OBLIGATOIRES
+
+DATABASE_URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Déjà configurée automatiquement par Railway
+Valeur : postgresql://postgres:PASSWORD@postgres.railway.internal:5432/railway
+
+
+JWT_SECRET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Clé secrète pour signer les tokens JWT
+Générer avec : openssl rand -base64 32
+Exemple : dGhpc2lzYXZlcnlzZWNyZXRrZXlmb3Jqd3Q=
+
+
+SESSION_SECRET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Clé secrète pour les sessions Express
+Générer avec : openssl rand -base64 32
+Exemple : c2Vzc2lvbnNlY3JldGtleWZvcmV4cHJlc3M=
+
+
+GITHUB_CLIENT_ID
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ID de votre OAuth App GitHub
+Obtenir sur : https://github.com/settings/developers
+Exemple : Iv1.a1b2c3d4e5f6g7h8
+
+
+GITHUB_CLIENT_SECRET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Secret de votre OAuth App GitHub
+Obtenir sur : https://github.com/settings/developers
+Exemple : 1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t
+
+
+GOOGLE_CLIENT_ID
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ID de votre OAuth 2.0 Client Google
+Obtenir sur : https://console.cloud.google.com/apis/credentials
+Exemple : 123456789012-abc123def456ghi789jkl012mno345pq.apps.googleusercontent.com
+
+
+GOOGLE_CLIENT_SECRET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Secret de votre OAuth 2.0 Client Google
+Obtenir sur : https://console.cloud.google.com/apis/credentials
+Exemple : GOCSPX-AbCdEfGhIjKlMnOpQrStUvWxYz
+
+
+BACKEND_URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+URL publique de votre backend Railway
+À configurer APRÈS avoir généré le domaine
+Exemple : https://backend-production-xxxx.up.railway.app
+
+
+FRONTEND_URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+URL de votre frontend Vercel
+À configurer APRÈS avoir déployé sur Vercel
+Exemple : https://devgaming.vercel.app
+
+
+## 🔧 OPTIONNELLES (avec valeurs par défaut)
+
+NODE_ENV=production
+PORT=5000
+
+
+## 📋 COMMANDES POUR GÉNÉRER LES SECRETS
+
+# JWT_SECRET
+openssl rand -base64 32
+
+# SESSION_SECRET
+openssl rand -base64 32
+
+
+## 📝 ORDRE DE CONFIGURATION
+
+1. Créer le service backend sur Railway Dashboard
+2. Ajouter DATABASE_URL (déjà présente si Postgres lié)
+3. Ajouter JWT_SECRET et SESSION_SECRET (générés)
+4. Ajouter GITHUB_CLIENT_ID et GITHUB_CLIENT_SECRET
+5. Ajouter GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET
+6. Déployer le code (railway up)
+7. Générer le domaine Railway
+8. Ajouter BACKEND_URL avec l'URL générée
+9. Déployer le frontend sur Vercel
+10. Ajouter FRONTEND_URL avec l'URL Vercel
+
+
+## 🚀 DÉPLOIEMENT RAPIDE
+
+Au lieu de CLI, utilisez Railway Dashboard :
+
+1. Dashboard → Projet "app.shelve"
+2. New → Empty Service → Nommez "backend"
+3. Settings → Variables → Ajoutez toutes les variables ci-dessus
+4. Settings → GitHub Repo → Connectez votre dépôt
+   OU
+5. Depuis le terminal : railway up (après avoir lié le service)

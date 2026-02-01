@@ -1,0 +1,45 @@
+SOLUTION : UTILISER LE SHELL WEB RAILWAY
+=========================================
+
+Le Shell Web Railway est le seul endroit où Prisma est installé et fonctionnel.
+
+ÉTAPES EXACTES :
+
+1. Ouvrez https://railway.app/dashboard
+
+2. Cliquez sur votre projet "app.shelve"
+
+3. Cliquez sur le service "backend" (PAS Postgres)
+
+4. Cliquez sur l'onglet "Deployments" (en haut)
+
+5. Cliquez sur le déploiement le plus récent (celui en haut)
+
+6. EN HAUT À DROITE, vous verrez 3 onglets :
+   - Build Logs
+   - Deploy Logs  
+   - Shell ← CLIQUEZ ICI
+
+7. Un terminal s'ouvrira dans votre navigateur
+
+8. Tapez ces 2 commandes UNE PAR UNE :
+
+   npx prisma migrate deploy
+   
+   (Attendez ~10 secondes, vous verrez "Migration applied successfully")
+   
+   npx prisma db seed
+   
+   (Attendez ~5 secondes, vous verrez "Database seeded successfully")
+
+9. TERMINÉ ! Fermez le Shell.
+
+POURQUOI railway shell/run NE FONCTIONNE PAS ?
+- Ces commandes exécutent le code en LOCAL (sur votre Mac)
+- Prisma n'est pas installé localement
+- Le Shell Web exécute le code SUR Railway où tout est installé
+
+ALTERNATIVE SI LE SHELL N'EST PAS VISIBLE :
+- Allez dans Settings → Service
+- Scrollez jusqu'à "Danger Zone"  
+- Cherchez "Run Command" ou "Shell"
